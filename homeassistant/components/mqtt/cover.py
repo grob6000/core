@@ -29,6 +29,8 @@ from homeassistant.const import (
     STATE_OPEN,
     STATE_OPENING,
     STATE_UNKNOWN,
+    STATE_PROBLEM,
+    STATE_IDLE
 )
 from homeassistant.core import callback
 import homeassistant.helpers.config_validation as cv
@@ -65,10 +67,13 @@ CONF_PAYLOAD_OPEN = "payload_open"
 CONF_PAYLOAD_STOP = "payload_stop"
 CONF_POSITION_CLOSED = "position_closed"
 CONF_POSITION_OPEN = "position_open"
-CONF_STATE_CLOSED = "state_closed"
-CONF_STATE_CLOSING = "state_closing"
-CONF_STATE_OPEN = "state_open"
-CONF_STATE_OPENING = "state_opening"
+CONF_STATE_CLOSED = "state_closed"      # is fully closed & stopped
+CONF_STATE_CLOSING = "state_closing"    # is moving, toward closed position
+CONF_STATE_OPEN = "state_open"          # is fully open & stopped
+CONF_STATE_OPENING = "state_opening"    # is moving, toward open position
+CONF_STATE_UNKNOWN = "state_unknown"    # state is unknown (by the controller, e.g. at boot)
+CONF_STATE_STOPPED = "state_stopped"    # stopped, but neither open nor closed
+CONF_STATE_OBSTRUCTED = "state_obstructed" # stopped, obstruction detected (reported by controller). if retrying, state should change to opening/closing etc.
 CONF_TILT_CLOSED_POSITION = "tilt_closed_value"
 CONF_TILT_INVERT_STATE = "tilt_invert_state"
 CONF_TILT_MAX = "tilt_max"
@@ -138,6 +143,10 @@ PLATFORM_SCHEMA = vol.All(
             vol.Optional(CONF_STATE_CLOSING, default=STATE_CLOSING): cv.string,
             vol.Optional(CONF_STATE_OPEN, default=STATE_OPEN): cv.string,
             vol.Optional(CONF_STATE_OPENING, default=STATE_OPENING): cv.string,
+            vol.Optional(CONF_STATE_PROBLEM, default=STATE_PROBLEM): cv.string,
+            vol.Optional(CONF_STATE_UNKNOWN, default=STATE_UNKNOWN): cv.string,
+            vol.Optional(CONF_STATE_STOPPED, default=STATE_IDLE): cv.string,
+            vol.Optional(CONF_STATE_OBSTRUCTED, default="obstructed"): cv.string,
             vol.Optional(CONF_STATE_TOPIC): mqtt.valid_subscribe_topic,
             vol.Optional(
                 CONF_TILT_CLOSED_POSITION, default=DEFAULT_TILT_CLOSED_POSITION
@@ -303,9 +312,17 @@ class MqttCover(
                 self._state = STATE_CLOSED
             elif payload == self._config[CONF_STATE_CLOSING]:
                 self._state = STATE_CLOSING
+            elif payload == self._config[CONF_STATE_UNKNOWN]:
+                self._state = STATE_UNKNOWN
+            elif payload == self._config[CONF_STATE_STOPPED]:
+                self._state = STATE_STOPPED
+            elif payload == self._config[CONF_STATE_OBSTRUCTED]:
+                self._state = STATE_OBSTRUCTED
+            elif payload == self._config[CONF_STATE_PROBLEM]:
+                self._state = STATE_PROBLEM
             else:
                 _LOGGER.warning(
-                    "Payload is not supported (e.g. open, closed, opening, closing): %s",
+                    "Payload is not supported (e.g. open, closed, opening, closing, unknown, stopped, obstructed, problem): %s",
                     payload,
                 )
                 return
